@@ -616,12 +616,172 @@ When deployed with Streamable HTTP transport, the MCP server is accessible at:
 
 Configure your MCP client (OpenWebUI, Claude, etc.) to connect to the `/mcp` endpoint for Streamable HTTP transport.
 
+## Persönliches Trainings-Dashboard
+
+Zusätzlich zum MCP-Server enthält dieses Repo einen zweiten, eigenständigen Webservice:
+ein passwortgeschütztes Dashboard, das alle verfügbaren Garmin-Trainings- und
+Gesundheitsdaten übersichtlich in einer Weboberfläche zeigt und einen in die
+Seite eingebauten KI-Trainingsberater (Claude) enthält, der deine aktuellen Daten
+kennt und dir zu deinem Trainingsplan Fragen beantwortet.
+
+Der Dashboard-Service läuft **getrennt** vom MCP-Server (eigener Prozess/Port),
+damit ein Neustart oder Fehler im Dashboard den produktiven MCP-Server nicht
+beeinträchtigt.
+
+### Zugriffsschutz
+
+Der Zugriff ist per HTTP-Basic-Auth auf **ein einziges Konto** beschränkt
+(`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`). Das ist bewusst einfach gehalten,
+schützt aber nur in Kombination mit TLS wirklich:
+
+- Betreibe den Dashboard-Service **nicht** direkt öffentlich im Internet.
+- Terminiere TLS an Ingress/Gateway und mach den Endpunkt nur über VPN,
+  internes Netz oder eine zusätzliche Auth-Schicht (z. B. Istio/OAuth2-Proxy)
+  erreichbar.
+- Wähle ein starkes, einzigartiges Passwort für `DASHBOARD_PASSWORD`.
+
+### Lokal starten
+
+```bash
+export GARMIN_EMAIL="your-email@example.com"
+export GARMIN_PASSWORD="your-password"
+export DASHBOARD_USERNAME="karl"
+export DASHBOARD_PASSWORD="ein-starkes-passwort"
+export ANTHROPIC_API_KEY="sk-ant-..."   # optional, aktiviert den KI-Trainingsberater
+export DASHBOARD_PORT="8080"
+
+uv run garmin-dashboard
+```
+
+Danach ist das Dashboard unter `http://localhost:8080` erreichbar (Login-Dialog
+des Browsers fragt nach `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`).
+
+| Variable | Beschreibung | Default | Erforderlich |
+|----------|-------------|---------|--------------|
+| `DASHBOARD_USERNAME` | Benutzername für den Dashboard-Login | - | Ja |
+| `DASHBOARD_PASSWORD` | Passwort für den Dashboard-Login | - | Ja |
+| `ANTHROPIC_API_KEY` | API-Key für den KI-Trainingsberater | - | Nein (ohne Key ist nur die Datenübersicht aktiv) |
+| `ADVISOR_MODEL` | Claude-Modell für den Berater | `claude-sonnet-5` | Nein |
+| `DASHBOARD_HOST` | Bind-Host | `0.0.0.0` | Nein |
+| `DASHBOARD_PORT` | Port | `8080` | Nein |
+| `DASHBOARD_CACHE_SECONDS` | Wie lange Garmin-Daten serverseitig gecacht werden, bevor sie erneut abgerufen werden | `300` | Nein |
+
+### Docker
+
+Das Dashboard nutzt dasselbe Image wie der MCP-Server, nur mit anderem Kommando:
+
+```bash
+docker run --rm -it \
+  -e GARMIN_EMAIL="your-email@example.com" \
+  -e GARMIN_PASSWORD="your-password" \
+  -e DASHBOARD_USERNAME="karl" \
+  -e DASHBOARD_PASSWORD="ein-starkes-passwort" \
+  -e ANTHROPIC_API_KEY="sk-ant-..." \
+  -p 8080:8080 \
+  -v garmin_tokens:/root/.garminconnect \
+  --entrypoint uv \
+  garmin-mcp:latest run garmin-dashboard
+```
+
+### Kubernetes
+
+Als eigenes `Deployment`/`Service`, das dieselben Secrets/Tokens wie der
+MCP-Server verwendet, z. B.:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garmin-dashboard
+  namespace: mcpo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garmin-dashboard
+  template:
+    metadata:
+      labels:
+        app: garmin-dashboard
+    spec:
+      containers:
+        - name: garmin-dashboard
+          image: garmin-mcp:latest
+          command: ["uv", "run", "garmin-dashboard"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: GARMIN_EMAIL
+              valueFrom: { secretKeyRef: { name: garmin-secrets, key: email } }
+            - name: GARMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: garmin-secrets, key: password } }
+            - name: DASHBOARD_USERNAME
+              valueFrom: { secretKeyRef: { name: dashboard-secrets, key: username } }
+            - name: DASHBOARD_PASSWORD
+              valueFrom: { secretKeyRef: { name: dashboard-secrets, key: password } }
+            - name: ANTHROPIC_API_KEY
+              valueFrom: { secretKeyRef: { name: dashboard-secrets, key: anthropic-api-key } }
+          volumeMounts:
+            - name: tokens
+              mountPath: /root/.garminconnect
+              readOnly: true   # dashboard only needs to read the existing session tokens
+      volumes:
+        - name: tokens
+          persistentVolumeClaim:
+            claimName: garmin-tokens
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garmin-dashboard
+  namespace: mcpo
+spec:
+  selector:
+    app: garmin-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+```
+
+Erstelle das `dashboard-secrets`-Secret analog zu `garmin-secrets`:
+
+```bash
+kubectl create secret generic dashboard-secrets \
+  --from-literal=username='karl' \
+  --from-literal=password='ein-starkes-passwort' \
+  --from-literal=anthropic-api-key='sk-ant-...' \
+  -n mcpo
+```
+
+Route den Service **nicht** öffentlich; binde ihn stattdessen über eine
+interne Gateway-Route/VPN an, damit wirklich nur du Zugriff hast.
+
+### Was das Dashboard zeigt
+
+- Tagesüberblick: Schritte, Ruheherzfrequenz, Trainingsbereitschaft,
+  Trainingsstatus, Body Battery, Stress, HRV, Schlaf, VO2max/Fitnessalter
+- Letzte Aktivitäten (Datum, Typ, Distanz, Dauer, Ø Herzfrequenz, Kalorien)
+- Aktive Ziele, persönliche Rekorde, Wettkampf-Prognosen
+- Gewichtsverlauf der letzten 30 Tage
+- Geräte & Ausrüstung
+- Ein "Alle Rohdaten anzeigen"-Bereich mit den kompletten, ungekürzten
+  Garmin-API-Antworten - nichts wird versteckt
+- Ein Chat mit deinem persönlichen KI-Trainingsberater (Claude), der die
+  obigen Daten als Kontext bekommt und konkrete Empfehlungen zum
+  Trainingsplan gibt (nur wenn `ANTHROPIC_API_KEY` gesetzt ist)
+
 ## Security Notes
 
 - **Never commit credentials**: Use environment variables or Kubernetes Secrets
 - **Token storage**: Tokens are stored locally/on PVC - ensure proper access controls
 - **Network security**: For production, use TLS/HTTPS (terminate at Ingress/Gateway)
 - **Secret rotation**: Rotate Garmin password regularly and update secrets accordingly
+- **Dashboard access**: The dashboard is protected by a single-account HTTP Basic
+  Auth login (see above) - keep it off the public internet and always front it
+  with TLS.
 
 ## License
 

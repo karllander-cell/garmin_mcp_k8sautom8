@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mein Trainingscockpit</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1a1d23;
+    --muted: #63697a;
+    --border: #e3e5ea;
+    --accent: #2f6fed;
+    --accent-weak: #eaf0ff;
+    --good: #1c8a4c;
+    --warn: #b3760b;
+    --bad: #c0392b;
+    --shadow: 0 1px 3px rgba(20,20,30,.06), 0 1px 2px rgba(20,20,30,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161b;
+      --panel: #1c1f26;
+      --text: #eef0f4;
+      --muted: #9ba1b0;
+      --border: #2a2e38;
+      --accent: #6a9bff;
+      --accent-weak: #202b45;
+      --good: #4ad07f;
+      --warn: #e0a83a;
+      --bad: #ff6b5e;
+      --shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161b;
+    --panel: #1c1f26;
+    --text: #eef0f4;
+    --muted: #9ba1b0;
+    --border: #2a2e38;
+    --accent: #6a9bff;
+    --accent-weak: #202b45;
+    --good: #4ad07f;
+    --warn: #e0a83a;
+    --bad: #ff6b5e;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding-block: 24px;
+    padding-inline: max(16px, calc((100vw - 1180px) / 2));
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
+  a { color: var(--accent); }
+
+  header.top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  header.top .meta { color: var(--muted); font-size: 12.5px; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 14px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  .stat-card .value { font-size: 22px; font-weight: 650; margin-top: 4px; }
+  .stat-card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-weak);
+    color: var(--accent);
+    margin-top: 6px;
+  }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; }
+  .table-wrap { overflow-x: auto; }
+
+  details.raw { margin-top: 8px; }
+  details.raw summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  details.raw pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    overflow-x: auto;
+    max-height: 260px;
+    font-size: 11.5px;
+  }
+
+  .pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { background: var(--accent-weak); color: var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+
+  /* Advisor chat */
+  .advisor { position: sticky; top: 20px; display: flex; flex-direction: column; height: calc(100vh - 40px); max-height: 720px; }
+  .advisor .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+  .msg { border-radius: 10px; padding: 8px 10px; font-size: 13px; max-width: 92%; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+  .msg.assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); }
+  .msg.system { align-self: center; color: var(--muted); font-size: 12px; }
+  .advisor form { display: flex; gap: 8px; margin-top: 10px; }
+  .advisor textarea {
+    flex: 1;
+    resize: none;
+    font: inherit;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 42px;
+    max-height: 120px;
+  }
+  .empty { color: var(--muted); font-style: italic; }
+  .error-text { color: var(--bad); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>🏃 Mein Trainingscockpit</h1>
+    <div class="meta" id="subtitle">lade Daten…</div>
+  </div>
+  <button id="refreshBtn">Daten aktualisieren</button>
+</header>
+
+<div class="layout">
+  <div>
+    <section class="panel">
+      <h2>Heute im Überblick</h2>
+      <div class="stat-grid" id="statGrid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Letzte Aktivitäten</h2>
+      <div class="table-wrap">
+        <table id="activityTable">
+          <thead>
+            <tr><th>Datum</th><th>Typ</th><th>Name</th><th>Distanz</th><th>Dauer</th><th>Ø HF</th><th>Kalorien</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="activityEmpty" hidden>Keine Aktivitäten geladen.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Ziele, Rekorde & Wettkampf-Prognosen</h2>
+      <div id="goalsBlock"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Gewichtsverlauf (30 Tage)</h2>
+      <div id="weightBlock"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Geräte &amp; Ausrüstung</h2>
+      <div id="gearBlock"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Alle Rohdaten</h2>
+      <details class="raw">
+        <summary>Komplettes API-Ergebnis anzeigen (alles, was Garmin liefert)</summary>
+        <pre id="rawAll">–</pre>
+      </details>
+    </section>
+  </div>
+
+  <aside class="panel advisor">
+    <h2>💬 Dein KI-Trainingsberater</h2>
+    <div class="log" id="chatLog">
+      <div class="msg system">Frag mich zu deinem Trainingsplan – ich kenne deine aktuellen Garmin-Daten.</div>
+    </div>
+    <form id="chatForm">
+      <textarea id="chatInput" placeholder="z.B. Wie sollte meine nächste Trainingswoche aussehen?"></textarea>
+      <button class="primary" type="submit">Senden</button>
+    </form>
+  </aside>
+</div>
+
+<script>
+const $ = (sel, root=document) => root.querySelector(sel);
+
+function pick(block, paths, fallback = null) {
+  if (!block || block.ok !== true) return fallback;
+  let data = block.data;
+  for (const path of paths) {
+    let node = data;
+    let found = true;
+    for (const key of path) {
+      if (node == null) { found = false; break; }
+      if (Array.isArray(node)) node = node[0];
+      if (node == null) { found = false; break; }
+      node = node[key];
+    }
+    if (found && node !== undefined && node !== null) return node;
+  }
+  return fallback;
+}
+
+function errorOf(block) {
+  return block && block.ok === false ? block.error : null;
+}
+
+function fmtNum(n, digits = 0) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '–';
+  return Number(n).toLocaleString('de-DE', { maximumFractionDigits: digits });
+}
+
+function fmtDuration(seconds) {
+  if (!seconds && seconds !== 0) return '–';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+
+function statCard(label, value, sub = '', badge = null) {
+  const div = document.createElement('div');
+  div.className = 'card stat-card';
+  div.innerHTML = `
+    <div class="label">${label}</div>
+    <div class="value">${value}</div>
+    ${sub ? `<div class="sub">${sub}</div>` : ''}
+    ${badge ? `<div class="badge">${badge}</div>` : ''}
+  `;
+  return div;
+}
+
+function rawDetails(title, obj) {
+  const d = document.createElement('details');
+  d.className = 'raw';
+  d.innerHTML = `<summary>${title}: Rohdaten anzeigen</summary><pre></pre>`;
+  d.querySelector('pre').textContent = JSON.stringify(obj, null, 2);
+  return d;
+}
+
+let overviewData = null;
+
+async function loadOverview(refresh = false) {
+  $('#subtitle').textContent = 'lade Daten…';
+  try {
+    const res = await fetch(`/api/overview${refresh ? '?refresh=true' : ''}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    overviewData = await res.json();
+    render(overviewData);
+  } catch (err) {
+    $('#subtitle').innerHTML = `<span class="error-text">Fehler beim Laden: ${err.message}</span>`;
+  }
+}
+
+function render(data) {
+  const name = pick(data.profile.full_name, [[]]) || 'Athlet';
+  $('#subtitle').textContent = `${name} · Stand: ${new Date(data.generated_at).toLocaleString('de-DE')}`;
+
+  const grid = $('#statGrid');
+  grid.innerHTML = '';
+
+  const today = data.today;
+  const steps = pick(today.stats, [['totalSteps'], ['dailyStepGoal']]);
+  grid.appendChild(statCard('Schritte heute', fmtNum(steps)));
+
+  const rhr = pick(today.resting_heart_rate, [['restingHeartRate'], ['allMetrics', 'metricsMap', 'WELLNESS_RESTING_HEART_RATE', 0, 'value']]);
+  grid.appendChild(statCard('Ruheherzfrequenz', rhr ? `${fmtNum(rhr)} bpm` : '–'));
+
+  const readinessScore = pick(today.training_readiness, [['score']]);
+  const readinessLevel = pick(today.training_readiness, [['level']], '');
+  grid.appendChild(statCard('Trainingsbereitschaft', readinessScore ? fmtNum(readinessScore) : '–', readinessLevel || ''));
+
+  let trainingStatus = null;
+  try {
+    const tsData = today.training_status && today.training_status.ok ? today.training_status.data : null;
+    const latest = tsData && tsData.mostRecentTrainingStatus && tsData.mostRecentTrainingStatus.latestTrainingStatusData;
+    if (latest) {
+      const firstKey = Object.keys(latest)[0];
+      trainingStatus = firstKey ? latest[firstKey].trainingStatus : null;
+    } else if (tsData && tsData.trainingStatus) {
+      trainingStatus = tsData.trainingStatus;
+    }
+  } catch (e) { trainingStatus = null; }
+  grid.appendChild(statCard('Trainingsstatus', trainingStatus || '–'));
+
+  const bodyBatteryCharged = pick(today.body_battery, [[0, 'charged'], ['charged']]);
+  const bodyBatteryDrained = pick(today.body_battery, [[0, 'drained'], ['drained']]);
+  grid.appendChild(statCard('Body Battery', bodyBatteryCharged !== null ? `+${fmtNum(bodyBatteryCharged)} / -${fmtNum(bodyBatteryDrained)}` : '–', 'geladen / verbraucht'));
+
+  const stressAvg = pick(today.stress, [['avgStressLevel']]);
+  grid.appendChild(statCard('Stress (Ø heute)', stressAvg !== null && stressAvg >= 0 ? fmtNum(stressAvg) : '–'));
+
+  const hrvWeekly = pick(today.hrv, [['hrvSummary', 'weeklyAvg'], ['hrvSummary', 'lastNightAvg']]);
+  grid.appendChild(statCard('HRV (Ø)', hrvWeekly ? `${fmtNum(hrvWeekly)} ms` : '–'));
+
+  const sleepSeconds = pick(data.sleep_last_night, [['dailySleepDTO', 'sleepTimeSeconds']]);
+  const sleepScore = pick(data.sleep_last_night, [['dailySleepDTO', 'sleepScores', 'overall', 'value']]);
+  grid.appendChild(statCard('Schlaf letzte Nacht', fmtDuration(sleepSeconds), sleepScore ? `Score ${fmtNum(sleepScore)}` : ''));
+
+  const vo2max = pick(data.fitness.max_metrics, [[0, 'generic', 'vo2MaxPreciseValue'], ['generic', 'vo2MaxPreciseValue']]);
+  const fitnessAge = pick(data.fitness.max_metrics, [[0, 'fitnessAge'], ['fitnessAge']]);
+  grid.appendChild(statCard('VO2max', vo2max ? fmtNum(vo2max, 1) : '–', fitnessAge ? `Fitnessalter ${fmtNum(fitnessAge)}` : ''));
+
+  const anyErrors = [today.stats, today.body_battery, today.stress, today.training_readiness, today.training_status, today.hrv, today.resting_heart_rate, data.sleep_last_night, data.fitness.max_metrics]
+    .map(errorOf).filter(Boolean);
+  if (anyErrors.length) {
+    const note = document.createElement('div');
+    note.className = 'card error-text';
+    note.style.gridColumn = '1 / -1';
+    note.textContent = `Einige Metriken konnten nicht geladen werden (z.B. weil Garmin dafür keine Daten hat): ${[...new Set(anyErrors)].slice(0,3).join(' · ')}`;
+    grid.appendChild(note);
+  }
+
+  // Activities table
+  const tbody = $('#activityTable tbody');
+  tbody.innerHTML = '';
+  const activities = data.recent_activities.ok ? data.recent_activities.data : [];
+  $('#activityEmpty').hidden = activities.length > 0;
+  for (const a of activities) {
+    const tr = document.createElement('tr');
+    const dist = a.distance ? `${fmtNum(a.distance / 1000, 2)} km` : '–';
+    const dur = a.duration ? fmtDuration(a.duration) : '–';
+    tr.innerHTML = `
+      <td>${(a.startTimeLocal || '').replace('T', ' ').slice(0, 16) || '–'}</td>
+      <td>${(a.activityType && a.activityType.typeKey) || '–'}</td>
+      <td>${a.activityName || '–'}</td>
+      <td>${dist}</td>
+      <td>${dur}</td>
+      <td>${a.averageHR ? fmtNum(a.averageHR) : '–'}</td>
+      <td>${a.calories ? fmtNum(a.calories) : '–'}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Goals / records / predictions
+  const goalsBlock = $('#goalsBlock');
+  goalsBlock.innerHTML = '';
+  const goals = data.active_goals.ok ? data.active_goals.data : [];
+  if (goals && goals.length) {
+    const pills = document.createElement('div');
+    pills.className = 'pill-list';
+    for (const g of goals) {
+      const span = document.createElement('span');
+      span.className = 'pill';
+      span.textContent = g.goalTypeName || g.name || JSON.stringify(g).slice(0, 40);
+      pills.appendChild(span);
+    }
+    goalsBlock.appendChild(pills);
+  } else {
+    goalsBlock.appendChild(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'Keine aktiven Ziele gefunden.' }));
+  }
+  goalsBlock.appendChild(rawDetails('Persönliche Rekorde', data.fitness.personal_records));
+  goalsBlock.appendChild(rawDetails('Wettkampf-Prognosen', data.fitness.race_predictions));
+  goalsBlock.appendChild(rawDetails('Endurance / Hill Score', { endurance: data.fitness.endurance_score, hill: data.fitness.hill_score }));
+
+  // Weight
+  const weightBlock = $('#weightBlock');
+  weightBlock.innerHTML = '';
+  const weighIns = pick(data.weight_trend, [['dailyWeightSummaries']]);
+  if (Array.isArray(weighIns) && weighIns.length) {
+    const table = document.createElement('table');
+    table.innerHTML = '<thead><tr><th>Datum</th><th>Gewicht</th></tr></thead><tbody></tbody>';
+    const tb = table.querySelector('tbody');
+    for (const w of weighIns.slice(-10).reverse()) {
+      const tr = document.createElement('tr');
+      const kg = w.allWeightMetrics && w.allWeightMetrics[0] ? w.allWeightMetrics[0].weight / 1000 : (w.weight ? w.weight/1000 : null);
+      tr.innerHTML = `<td>${w.summaryDate || w.calendarDate || '–'}</td><td>${kg ? fmtNum(kg,1) + ' kg' : '–'}</td>`;
+      tb.appendChild(tr);
+    }
+    weightBlock.appendChild(table);
+  } else {
+    weightBlock.appendChild(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'Keine Gewichtsdaten in den letzten 30 Tagen.' }));
+  }
+  weightBlock.appendChild(rawDetails('Gewichtsverlauf', data.weight_trend));
+
+  // Gear / devices
+  const gearBlock = $('#gearBlock');
+  gearBlock.innerHTML = '';
+  const devices = data.devices.ok ? data.devices.data : [];
+  if (devices && devices.length) {
+    const pills = document.createElement('div');
+    pills.className = 'pill-list';
+    for (const d of devices) {
+      const span = document.createElement('span');
+      span.className = 'pill';
+      span.textContent = d.productDisplayName || d.deviceType || 'Gerät';
+      pills.appendChild(span);
+    }
+    gearBlock.appendChild(pills);
+  } else {
+    gearBlock.appendChild(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'Keine Geräte gefunden.' }));
+  }
+  gearBlock.appendChild(rawDetails('Ausrüstung (Schuhe, Räder, …)', data.gear));
+
+  $('#rawAll').textContent = JSON.stringify(data, null, 2);
+}
+
+$('#refreshBtn').addEventListener('click', () => loadOverview(true));
+
+// --- Advisor chat ---
+const chatLog = $('#chatLog');
+const chatForm = $('#chatForm');
+const chatInput = $('#chatInput');
+let history = [];
+
+function appendMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return div;
+}
+
+chatForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const message = chatInput.value.trim();
+  if (!message) return;
+  chatInput.value = '';
+  appendMsg('user', message);
+  const thinking = appendMsg('system', 'denke nach…');
+
+  try {
+    const res = await fetch('/api/advisor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+    });
+    const body = await res.json().catch(() => ({}));
+    thinking.remove();
+    if (!res.ok) {
+      appendMsg('system', `⚠️ ${body.detail || `Fehler ${res.status}`}`);
+      return;
+    }
+    appendMsg('assistant', body.reply);
+    history.push({ role: 'user', content: message });
+    history.push({ role: 'assistant', content: body.reply });
+    if (history.length > 20) history = history.slice(-20);
+  } catch (err) {
+    thinking.remove();
+    appendMsg('system', `⚠️ Netzwerkfehler: ${err.message}`);
+  }
+});
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    chatForm.requestSubmit();
+  }
+});
+
+loadOverview(false);
+</script>
+</body>
+</html>
