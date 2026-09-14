@@ -1,0 +1,76 @@
+# Deployment für das persönliche Trainings-Dashboard.
+# Läuft als eigener Pod, getrennt vom garmin-mcp-Deployment, auf Port 8080.
+#
+# Voraussetzungen vor "kubectl apply -f deployment.yaml":
+#   - Namespace "mcpo" existiert bereits (siehe Haupt-README, Schritt 1)
+#   - Secret "garmin-secrets" existiert bereits (wiederverwendet vom MCP-Server)
+#   - Secret "dashboard-secrets" wurde angelegt (siehe secret.example.yaml)
+#   - Secret "ghcr-pull-secret" wurde angelegt, damit das private Image von
+#     ghcr.io gepullt werden darf (siehe README.md in diesem Ordner)
+#   - PVC "garmin-tokens" existiert bereits (siehe Haupt-README, Schritt 2)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garmin-dashboard
+  namespace: mcpo
+  labels:
+    app: garmin-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garmin-dashboard
+  template:
+    metadata:
+      labels:
+        app: garmin-dashboard
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: garmin-dashboard
+          image: ghcr.io/karllander-cell/garmin-mcp-dashboard:latest
+          imagePullPolicy: Always
+          command: ["uv", "run", "garmin-dashboard"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: GARMIN_EMAIL
+              valueFrom:
+                secretKeyRef: { name: garmin-secrets, key: email }
+            - name: GARMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: garmin-secrets, key: password }
+            - name: DASHBOARD_USERNAME
+              valueFrom:
+                secretKeyRef: { name: dashboard-secrets, key: username }
+            - name: DASHBOARD_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: dashboard-secrets, key: password }
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dashboard-secrets
+                  key: anthropic-api-key
+                  optional: true
+            - name: DASHBOARD_HOST
+              value: "0.0.0.0"
+            - name: DASHBOARD_PORT
+              value: "8080"
+          volumeMounts:
+            - name: tokens
+              mountPath: /root/.garminconnect
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: tokens
+          persistentVolumeClaim:
+            claimName: garmin-tokens

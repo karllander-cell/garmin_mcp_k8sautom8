@@ -1,0 +1,16 @@
+# ClusterIP-Service für das Dashboard - bewusst NICHT vom Internet erreichbar.
+# Zugriff nur aus dem Cluster/Tailnet heraus (z. B. via "kubectl port-forward",
+# "tailscale serve" oder eine interne Istio-Route - siehe Haupt-README).
+apiVersion: v1
+kind: Service
+metadata:
+  name: garmin-dashboard
+  namespace: mcpo
+spec:
+  selector:
+    app: garmin-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
