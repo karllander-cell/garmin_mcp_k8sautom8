@@ -337,6 +337,10 @@ def main():
     """Initialise the Garmin client and start the dashboard web server."""
     global garmin_client
 
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
     email = os.environ.get("GARMIN_EMAIL")
     password = os.environ.get("GARMIN_PASSWORD")
 
